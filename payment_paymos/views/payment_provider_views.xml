@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="payment_provider_form" model="ir.ui.view">
+        <field name="name">Paymos payment provider</field>
+        <field name="model">payment.provider</field>
+        <field name="inherit_id" ref="payment.payment_provider_form"/>
+        <field name="arch" type="xml">
+            <field name="is_live" position="attributes">
+                <attribute name="readonly" add="code == 'paymos'" separator=" or "/>
+            </field>
+            <field name="company_id" position="attributes">
+                <attribute name="readonly" add="id and code == 'paymos'" separator=" or "/>
+            </field>
+            <group name="provider_credentials" position="inside">
+                <group invisible="code != 'paymos' or not id" groups="base.group_system">
+                    <field name="paymos_connection_status"/>
+                    <field name="paymos_project_alias" invisible="paymos_connection_status != 'connected'"/>
+                    <div class="d-flex flex-wrap gap-2" colspan="2">
+                        <button name="action_paymos_connect" type="object" string="Connect Paymos"
+                                class="btn-primary" invisible="paymos_connection_status == 'connected'"/>
+                        <button name="action_paymos_connect" type="object" string="Reconnect"
+                                invisible="paymos_connection_status != 'connected'"/>
+                        <button name="action_paymos_use_live" type="object" string="Select Live"
+                                invisible="is_live or paymos_connection_status != 'connected'"
+                                confirm="Switch Paymos to Live credentials? Enable and publish the provider after verifying the change."/>
+                        <button name="action_paymos_use_sandbox" type="object" string="Select Sandbox"
+                                invisible="not is_live or paymos_connection_status != 'connected'"/>
+                        <button name="action_paymos_disconnect" type="object" string="Disconnect"
+                                invisible="paymos_connection_status != 'connected'"
+                                confirm="Disconnect Paymos from new checkouts? Existing payments remain linked for reconciliation."/>
+                    </div>
+                    <div class="text-muted" colspan="2">
+                        Enable and publish the provider after connecting to make Paymos available at checkout.
+                    </div>
+                </group>
+            </group>
+        </field>
+    </record>
+</odoo>

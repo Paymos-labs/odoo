@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="payment_method_paymos" model="payment.method">
+        <field name="support_refund">full_only</field>
+    </record>
+
+    <record id="paymos_payment_transaction_form" model="ir.ui.view">
+        <field name="name">Paymos payment operations</field>
+        <field name="model">payment.transaction</field>
+        <field name="inherit_id" ref="payment.payment_transaction_form"/>
+        <field name="arch" type="xml">
+            <header position="inside">
+                <field name="provider_code" invisible="True"/>
+                <field name="operation" invisible="True"/>
+                <button name="action_paymos_refund_overpayment" type="object" string="Refund Paymos overpayment"
+                        groups="base.group_system"
+                        invisible="provider_code != 'paymos' or state != 'done' or operation != 'online_redirect'"
+                        confirm="Request a refund of the Paymos overpayment to the original payer?"/>
+            </header>
+        </field>
+    </record>
+
+    <record id="paymos_operation_cron" model="ir.cron">
+        <field name="name">Paymos: reconcile invoices and refunds</field>
+        <field name="model_id" ref="model_paymos_refund"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_paymos_operations()</field>
+        <field name="user_id" ref="base.user_root"/>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+    </record>
+</odoo>

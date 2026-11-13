@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="payment_provider_paymos" model="payment.provider">
+        <field name="name">Paymos</field>
+        <field name="code">paymos</field>
+        <field name="module_id" ref="base.module_payment_paymos"/>
+        <field name="active" eval="False"/>
+        <field name="is_live" eval="False"/>
+        <field name="is_published" eval="False"/>
+    </record>
+
+    <record id="payment_method_paymos" model="payment.method">
+        <field name="name">Paymos</field>
+        <field name="code">paymos</field>
+        <field name="provider_id" ref="payment_provider_paymos"/>
+        <field name="active" eval="False"/>
+        <!-- Existing Paymos favicon, embedded while the distribution has no static artwork. -->
+        <field name="image" eval="
+            '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'
+            'Av4NRfXgVIQkt2sAAAAASUVORK5CYII='
+        "/>
+    </record>
+</odoo>

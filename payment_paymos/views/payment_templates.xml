@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="redirect_form">
+        <form method="post" t-att-action="start_url">
+            <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+            <input type="hidden" name="tx_id" t-att-value="tx_id"/>
+            <input type="hidden" name="attempt_id" t-att-value="attempt_id"/>
+            <input type="hidden" name="access_token" t-att-value="access_token"/>
+        </form>
+    </template>
+</odoo>

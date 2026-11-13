@@ -1,0 +1,10 @@
+Paymos Payments for Odoo
+Copyright (c) 2026 Paymos Labs
+
+This add-on is licensed under the GNU Lesser General Public License version 3.
+The LICENSE file includes the LGPL version 3 and the GNU GPL version 3 texts.
+
+The distribution includes the Paymos Python SDK 1.6.0, copyright (c) 2026 Paymos Labs,
+under the MIT License. The original notice and license are included in
+payment_paymos/_vendor/paymos/LICENSE. The package manifest records the exact source
+and runtime files. Source is available at https://github.com/Paymos-labs/python-sdk.

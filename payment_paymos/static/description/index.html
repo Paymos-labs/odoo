@@ -1,0 +1,28 @@
+<section class="oe_container">
+  <div class="oe_row oe_spaced">
+    <h2 class="oe_slogan">Paymos Payments for Odoo</h2>
+    <p>Add Paymos to a self-hosted Odoo 20.0 website shop. Buyers pay on the Paymos checkout. Odoo confirms the linked order after checking the signed notification and matching the invoice with Paymos.</p>
+    <p>Use a Paymos account and project, a public HTTPS storefront, and a bank journal for the same Odoo company. Start in Sandbox and verify a test order before going live. Odoo Online does not support this add-on. Odoo.sh is not verified.</p>
+  </div>
+</section>
+<section class="oe_container">
+  <div class="oe_row oe_spaced">
+    <h3>Connect from Payment Providers</h3>
+    <p>An Odoo system administrator chooses Connect Paymos and approves the project. A free installation does not require connecting a project. Connect is required to take payments through Paymos.</p>
+    <img class="img-fluid" src="setup.png" alt="Connect Paymos in the Odoo payment provider settings">
+  </div>
+</section>
+<section class="oe_container">
+  <div class="oe_row oe_spaced">
+    <h3>Confirm the order after payment</h3>
+    <p>Paymos receives the store URL during connection. An invoice request sends the project identifier, saved order amount, currency, and an opaque reference. It does not include the buyer’s name or email. Paymos hosts the payment page and sends the signed result back to Odoo.</p>
+    <img class="img-fluid" src="checkout.png" alt="Paymos as a payment option in an Odoo test checkout">
+  </div>
+</section>
+<section class="oe_container">
+  <div class="oe_row oe_spaced">
+    <h3>Review a refund in Odoo</h3>
+    <p>Use Refund on the accounting payment for the full original amount or Refund Paymos overpayment on the payment transaction for the excess. Paymos calculates the token amount and returns it to the recorded payer. Odoo records the verified outcome.</p>
+    <img class="img-fluid" src="refund.png" alt="Paymos refund controls on an Odoo test payment">
+  </div>
+</section>
