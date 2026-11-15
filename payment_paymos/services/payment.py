@@ -403,14 +403,10 @@ def _coverage(invoice):
         or not re.fullmatch(r"[A-Z0-9_-]{2,24}", network)
     ):
         raise CheckoutError("insufficient_payment")
+    # Callers require a final paid/paid_over status: the server already applied its underpayment tolerance.
     try:
         expected = money.parse_decimal(data.get("expected"))
         paid = money.parse_decimal(data.get("paid"), allow_zero=True)
-        if paid < expected or (
-            data.get("remaining") is not None
-            and money.parse_decimal(data["remaining"], allow_zero=True) != 0
-        ):
-            raise CheckoutError("insufficient_payment")
     except money.AmountError:
         raise CheckoutError("insufficient_payment") from None
     return token, network, expected, paid

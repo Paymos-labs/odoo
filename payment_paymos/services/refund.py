@@ -156,8 +156,6 @@ def request_operation(parent, mode, amount=None):
         raise payment.CheckoutError("refund_needs_review")
     credentials = payment.credentials_for_attempt(attempt)
     _requires_contract(credentials)
-    if not credentials.refunds_enabled:
-        raise payment.CheckoutError("refund_disabled")
     if mode == "full":
         payment.assert_accounting_ready(parent.provider_id, parent.currency_id)
         with parent._paymos_allow_refund_create():
@@ -336,7 +334,7 @@ def run_operation(operation):
         return
     try:
         _check_local_operation(operation)
-        credentials, client, invoice, history = _api_snapshot(operation.attempt_id)
+        _credentials, client, invoice, history = _api_snapshot(operation.attempt_id)
         matching = [item for item in history if item["external_order_id"] == operation.external_order_id]
         if len(matching) > 1:
             raise RefundSnapshotError("refund_binding_mismatch")
@@ -346,8 +344,6 @@ def run_operation(operation):
         elif matching:
             snapshot = payment._sdk_call(client.refunds.get, matching[0]["withdrawal_id"])
         else:
-            if not credentials.refunds_enabled:
-                raise RefundSnapshotError("refund_disabled")
             if any(
                 item["status"] in _IN_FLIGHT
                 or (item["mode"] == "full" and item["status"] == "completed")

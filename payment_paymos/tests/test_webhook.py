@@ -352,10 +352,20 @@ class TestPaymosWebhook(HttpCase):
         self.assertFalse(tx.is_post_processed)
         self.assertEqual((order.state, foreign_order.state), ("draft", "draft"))
 
+    def test_final_paid_within_server_tolerance_settles(self):
+        order, tx, attempt = self._attempt()
+        exact = self._invoice(attempt)
+        tolerated = exact | {"payment": exact["payment"] | {"paid": "9.9", "remaining": "0.1"}}
+        self.client.invoices.get.return_value = tolerated
+        self.assertEqual(self._post(self._raw(tolerated, "evt_paymos_tolerated")).status_code, 200)
+        self.assertFalse(attempt.review_reason)
+        self._consume(tx, post_process=False)
+        self.assertEqual((tx.state, attempt.disposition), ("done", "paid"))
+
     def test_underpaid_and_late_remain_unsettled(self):
         order, tx, attempt = self._attempt()
         exact = self._invoice(attempt)
-        underpaid = exact | {"payment": exact["payment"] | {"paid": "9.9", "remaining": "0.1"}}
+        underpaid = exact | {"status": "underpaid", "payment": exact["payment"] | {"paid": "9.9", "remaining": "0.1"}}
         self.client.invoices.get.return_value = underpaid
         self.assertEqual(self._post(self._raw(underpaid, "evt_paymos_underpaid")).status_code, 200)
         self.assertEqual((attempt.disposition, attempt.review_reason), ("review", "insufficient_payment"))

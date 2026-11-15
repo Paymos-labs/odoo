@@ -73,15 +73,15 @@ class TestPaymosRefund(HttpCase):
         self.factory = self.startPatcher(patch.object(sdk, "make_client", return_value=self.client))
         self.startPatcher(patch.object(sdk, "webhook_verifier", side_effect=_RawVerifier))
 
-    def _connection(self, environment):
+    def _connection(self, environment, *, refunds_enabled=True, generation=1):
         stage = "test" if environment == "sandbox" else "live"
         credentials = connect.Credentials(
             _PROJECT, environment, f"pk_{stage}_refund_fixture", f"sk_{stage}_refund_fixture",
-            f"whsec_{stage}_refund_fixture", ("invoice_refunds_v1",), 1, True,
+            f"whsec_{stage}_refund_fixture", ("invoice_refunds_v1",), 1, refunds_enabled,
         )
         binding = {
             "provider_id": self.provider.id, "company_id": self.company.id,
-            "generation": 1, "source_url": _SOURCE,
+            "generation": generation, "source_url": _SOURCE,
         }
         return self.env["paymos.connection"].create(dict(
             binding, project_id=_PROJECT, environment=environment,
@@ -375,3 +375,35 @@ class TestPaymosRefund(HttpCase):
         self.client.invoices.create.assert_not_called()
         self._native_apply(tx)
         self.assertEqual((tx.state, order.state, attempt.disposition), ("done", "sale", "paid"))
+
+    def test_stale_refunds_enabled_false_allows_refund_with_valid_contract(self):
+        disabled = self._connection("sandbox", refunds_enabled=False, generation=2)
+        self.provider.write({"paymos_active_connection_id": disabled.id})
+        _order, parent, attempt, _invoice = self._settled()
+
+        actor = self._actor(parent)
+        actor.action_refund(amount_to_refund=12.34)
+        operation = self._operation(attempt)
+        child = operation.child_transaction_id
+        self.assertEqual((operation.state, child.operation, child.amount), ("to_send", "refund", -12.34))
+
+        completed = self._snapshot(operation)
+        self.client.refunds.create.return_value = completed
+        self.client.refunds.get.return_value = completed
+        refund.run_operation(operation)
+        self.assertEqual(operation.state, "queued")
+        self.assertFalse(operation.review_reason)
+        self.client.refunds.create.assert_called_once_with(
+            invoice_id=_INVOICE_ID, mode="full", external_order_id=operation.external_order_id,
+        )
+
+        self.client.refunds.list.return_value = {"items": [completed], "next_cursor": None}
+        self._native_apply(child)
+        self.assertEqual((child.state, operation.state), ("done", "completed"))
+
+        invalid = connect.Credentials(
+            _PROJECT, "sandbox", "pk_test_refund_fixture", "sk_test_refund_fixture",
+            "whsec_test_refund_fixture", ("invoice_refunds_v1",), None, False,
+        )
+        with self.assertRaisesRegex(refund.RefundSnapshotError, "refund_contract_unavailable"):
+            refund._requires_contract(invalid)
