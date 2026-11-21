@@ -31,7 +31,7 @@ The steps below cover a self-hosted Odoo 20.0 installation. Odoo.sh can install 
 
 The Paymos approval page receives the store's canonical HTTPS URL and a one-time approval code when an administrator opens it through **Connect Paymos**.
 
-To create an invoice, Odoo sends the Paymos project ID, order amount, currency and an opaque order reference. Odoo keeps buyer identity out of that request. The buyer enters payment details on the hosted Paymos page. Odoo verifies signed notifications and checks the invoice with Paymos before confirming the linked sale. A scheduled reconciliation job checks for missed notifications.
+To create an invoice, Odoo sends the Paymos project ID, order amount, currency and an opaque order reference. For orders with 1 to 50 valid product lines on `sale.order.order_line` (excluding `display_type`, `is_delivery`, and `is_downpayment`), Odoo also passes an optional `products[]` array (`title`, positive integer `quantity`, exact decimal `unit_amount`, plus optional plain-text `description`). If an order has 0 or more than 50 product lines, a fractional quantity, or any invalid product line, Odoo falls back all-or-nothing to an amount-only invoice using the native order total. The normalized `products_json` snapshot is stored on `paymos.attempt` before the first request. Retries replay its original product values, omitting only the retired `image_url` key from older snapshots without rewriting stored data. Before the first request, all other product changes still invalidate the prepared attempt. Odoo keeps buyer identity out of that request. The buyer enters payment details on the hosted Paymos page. Odoo verifies signed notifications and checks the invoice with Paymos before confirming the linked sale. A scheduled reconciliation job checks for missed notifications.
 
 [Paymos documentation](https://paymos.io/docs), [Paymos privacy policy](https://paymos.io/privacy)
 
@@ -46,11 +46,18 @@ Review a failed refund or an operation that reaches its verification limit in Pa
 
 ## Build from source
 
-Use the release wheel for Paymos Python SDK 1.6.0. The builder verifies its SHA-256 and the unchanged runtime files against the pinned Git source. It uses only local inputs. The optional mirror directory receives exactly the files from the ZIP. [SDK source](https://github.com/Paymos-labs/python-sdk/tree/3f4133fc1c5d24bb8ed0af824fa4dfdee6a48696), [SDK wheel](https://pypi.org/project/paymos-sdk/1.6.0/#files)
+Bundle any stamped stable Paymos Python SDK `1.x` release (`>= 1.6.0`) from a local SDK source tree (`--sdk-source`, the default release flow) or from an offline release wheel (`--sdk-wheel`). The add-on sends optional `products[]` payloads over the bundled SDK's `client.request("POST", "/v1/invoices", payload)` transport without modifying the SDK source. The builder verifies the SDK version, required runtime files, license, and SHA-256 checksums using only local inputs. The optional mirror directory receives exactly the files from the ZIP. [SDK source](https://github.com/Paymos-labs/python-sdk), [SDK releases on PyPI](https://pypi.org/project/paymos-sdk/)
 
 ```sh
-python scripts/build-odoo-plugin.py build --sdk-wheel /path/to/paymos_sdk-1.6.0-py3-none-any.whl --output /path/to/paymos-odoo-v1.0.0.zip --mirror-dir /path/to/empty-mirror
-python scripts/build-odoo-plugin.py verify --archive /path/to/paymos-odoo-v1.0.0.zip
+python scripts/build-odoo-plugin.py build --sdk-source /path/to/python-sdk --output /path/to/paymos-odoo-v1.1.0.zip --mirror-dir /path/to/empty-mirror
+python scripts/build-odoo-plugin.py verify --archive /path/to/paymos-odoo-v1.1.0.zip --sdk-source /path/to/python-sdk
 ```
 
-Pass the same full `--source-commit` to `build` and `verify` when building from a release commit. The `bundle-manifest.json` records the Odoo version, tag, source and file hashes, and SDK pin. The command prints the ZIP's SHA-256.
+To build from an offline release wheel instead of a source tree:
+
+```sh
+python scripts/build-odoo-plugin.py build --sdk-wheel /path/to/paymos_sdk-1.7.1-py3-none-any.whl --output /path/to/paymos-odoo-v1.1.0.zip --mirror-dir /path/to/empty-mirror
+python scripts/build-odoo-plugin.py verify --archive /path/to/paymos-odoo-v1.1.0.zip
+```
+
+Pass the same full `--source-commit` (and optional `--sdk-version` / `--sdk-source-commit`) to `build` and `verify` when building from a release commit. The `bundle-manifest.json` records the Odoo version, tag, source and file hashes, and bundled SDK metadata. The command prints the ZIP's SHA-256.

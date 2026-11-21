@@ -47,6 +47,16 @@ PaymentChannelDepositEventType: TypeAlias = Literal[
 SimulateDepositStage: TypeAlias = Literal["confirming", "reorged", "confirmed"]
 
 
+class InvoiceProductRequired(TypedDict):
+    title: str
+    quantity: int
+    unit_amount: str
+
+
+class InvoiceProduct(InvoiceProductRequired, total=False):
+    description: str | None
+
+
 class OrderRequired(TypedDict):
     external_id: str
     amount: str
@@ -56,6 +66,7 @@ class OrderRequired(TypedDict):
 class Order(OrderRequired, total=False):
     client_id: str
     network: str
+    products: list[InvoiceProduct]
 
 
 class TransferRequired(TypedDict):

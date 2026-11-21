@@ -303,6 +303,21 @@ class TestPaymosConnect(TransactionCase):
             sdk.webhook_verifier(credentials)
             vendor.WebhookVerifier.assert_called_once_with(credentials.webhook_secret)
 
+        for supported in ("1.6.0", "1.7.1", "1.12.0"):
+            with self.subTest(supported_sdk=supported):
+                self.assertTrue(sdk.is_supported_sdk_version(supported))
+                supported_vendor = SimpleNamespace(VERSION=supported)
+                with patch.object(sdk, "import_module", return_value=supported_vendor):
+                    self.assertIs(sdk._vendor(), supported_vendor)
+
+        for unsupported in ("1.5.9", "2.0.0", "1.7.1rc1", "1.7.1-rc.1", "1.06.0", "v1.7.1", None, 171):
+            with self.subTest(unsupported_sdk=unsupported):
+                self.assertFalse(sdk.is_supported_sdk_version(unsupported))
+                unsupported_vendor = SimpleNamespace(VERSION=unsupported)
+                with patch.object(sdk, "import_module", return_value=unsupported_vendor):
+                    with self.assertRaisesRegex(sdk.PaymosSdkError, "version does not match"):
+                        sdk._vendor()
+
         transport = vendor.Paymos.call_args.kwargs["transport"]
         remote = _response(409, {"code": "idempotency_conflict", "detail": "sk_test_mock"})
         with patch.object(sdk, "request_https", return_value=remote):

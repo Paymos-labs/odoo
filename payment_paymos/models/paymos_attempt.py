@@ -8,6 +8,7 @@ _REPLACEABLE = ("cancelled", "expired")
 _BINDING_FIELDS = {
     "company_id", "provider_id", "connection_id", "sale_order_id", "transaction_id",
     "project_id", "environment", "generation", "external_order_id", "amount", "currency",
+    "products_json",
 }
 
 
@@ -39,6 +40,7 @@ class PaymosAttempt(models.Model):
     invoice_id = fields.Char(readonly=True, copy=False)
     amount = fields.Char(required=True, readonly=True)
     currency = fields.Char(required=True, readonly=True)
+    products_json = fields.Text(readonly=True, copy=False)
     disposition = fields.Selection(
         [
             ("prepared", "Prepared"),

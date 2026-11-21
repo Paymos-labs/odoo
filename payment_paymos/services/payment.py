@@ -1,8 +1,11 @@
 import hashlib
 import hmac
+import html
 import json
+import math
 import re
 import secrets
+from decimal import Decimal
 
 from odoo.tools import SQL
 
@@ -13,6 +16,14 @@ START_URL = "/payment/paymos/start"
 _REPLACEABLE = ("cancelled", "expired")
 _RESUMABLE = ("prepared", "open")
 _OPEN_INVOICES = ("awaiting_client", "awaiting_payment", "confirming", "underpaid_waiting")
+_MAX_PRODUCTS = 50
+_MAX_TITLE_SCALARS = 200
+_MAX_DESCRIPTION_SCALARS = 2000
+_MAX_INT32 = 2147483647
+_UNIT_AMOUNT_RE = re.compile(r"(?:0|[1-9][0-9]{0,19})(?:\.[0-9]{1,18})?")
+_TAG_RE = re.compile(r"<!--[\s\S]*?-->|</?[A-Za-z!/?][^>]*>")
+_BREAK_TAG_RE = re.compile(r"<br\s*/?>|</(?:p|div|li)>", re.IGNORECASE)
+_UNSET = object()
 
 
 class CheckoutError(ValueError):
@@ -135,7 +146,195 @@ def _checkout_snapshot(transaction, order, provider):
     return connection, amount, currency.name
 
 
-def _assert_attempt_snapshot(attempt, order, provider, connection, amount, currency):
+def _clean_utf8(value):
+    if not isinstance(value, str):
+        return None
+    clean = value.replace("\x00", "")
+    try:
+        clean.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    return clean
+
+
+def _normalize_title(value):
+    clean = _clean_utf8(value)
+    if clean is None:
+        return None
+    stripped = html.unescape(_TAG_RE.sub("", clean)).replace("\x00", "")
+    collapsed = re.sub(r"[\r\n\t]+", " ", stripped).strip()
+    if not collapsed or len(collapsed) > _MAX_TITLE_SCALARS:
+        return None
+    return collapsed
+
+
+def _normalize_description(value):
+    clean = _clean_utf8(value)
+    if clean is None:
+        return None
+    with_breaks = _BREAK_TAG_RE.sub("\n", clean)
+    decoded = html.unescape(_TAG_RE.sub("", with_breaks)).replace("\x00", "")
+    normalized = decoded.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        return None
+    if len(normalized) > _MAX_DESCRIPTION_SCALARS:
+        normalized = normalized[:_MAX_DESCRIPTION_SCALARS].rstrip()
+        if not normalized:
+            return None
+    return normalized
+
+
+def _normalize_quantity(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if 1 <= value <= _MAX_INT32 else None
+    if isinstance(value, float):
+        if not math.isfinite(value) or value <= 0 or not value.is_integer():
+            return None
+        quantity = int(value)
+        return quantity if 1 <= quantity <= _MAX_INT32 else None
+    if isinstance(value, Decimal):
+        if not value.is_finite() or value <= 0 or value != value.to_integral_value():
+            return None
+        quantity = int(value)
+        return quantity if 1 <= quantity <= _MAX_INT32 else None
+    if isinstance(value, str):
+        if not re.fullmatch(r"[1-9][0-9]{0,9}", value):
+            return None
+        quantity = int(value)
+        return quantity if 1 <= quantity <= _MAX_INT32 else None
+    return None
+
+
+def _normalize_unit_amount(value, currency=None):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        if "\x00" in value:
+            return None
+        trimmed = value.strip()
+        if len(trimmed) > 39 or not _UNIT_AMOUNT_RE.fullmatch(trimmed):
+            return None
+        return trimmed
+    if isinstance(value, int):
+        if value < 0:
+            return None
+        if currency is not None:
+            try:
+                formatted = money.native_amount(value, currency, allow_zero=True)
+            except money.AmountError:
+                formatted = None
+            if formatted is not None and len(formatted) <= 39 and _UNIT_AMOUNT_RE.fullmatch(formatted):
+                return formatted
+        text = str(value)
+        return text if len(text) <= 39 and _UNIT_AMOUNT_RE.fullmatch(text) else None
+    if isinstance(value, float):
+        if not math.isfinite(value) or value < 0:
+            return None
+        if currency is not None:
+            try:
+                formatted = money.native_amount(value, currency, allow_zero=True)
+            except money.AmountError as error:
+                if str(error) != "invalid_minor_units":
+                    return None
+                formatted = None
+            if formatted is not None and len(formatted) <= 39 and _UNIT_AMOUNT_RE.fullmatch(formatted):
+                return formatted
+        text = format(Decimal(str(value)), "f")
+        return text if len(text) <= 39 and _UNIT_AMOUNT_RE.fullmatch(text) else None
+    if isinstance(value, Decimal):
+        if not value.is_finite() or value < 0:
+            return None
+        text = format(value, "f")
+        return text if len(text) <= 39 and _UNIT_AMOUNT_RE.fullmatch(text) else None
+    return None
+
+
+def _normalize_product_line(line, currency):
+    title = _normalize_title(getattr(line, "name", None))
+    if title is None:
+        return None
+    quantity = _normalize_quantity(getattr(line, "product_uom_qty", None))
+    if quantity is None:
+        return None
+    unit_amount = _normalize_unit_amount(getattr(line, "price_unit", None), currency)
+    if unit_amount is None:
+        return None
+
+    item = {
+        "title": title,
+        "quantity": quantity,
+        "unit_amount": unit_amount,
+    }
+    product = getattr(line, "product_id", None)
+    raw_description = getattr(line, "description_sale", None)
+    if not isinstance(raw_description, str) and product:
+        raw_description = getattr(product, "description_sale", None)
+    description = _normalize_description(raw_description)
+    if description is not None:
+        item["description"] = description
+
+    return item
+
+
+def _extract_products(order):
+    currency = getattr(order, "currency_id", None)
+    items = []
+    for line in getattr(order, "order_line", ()) or ():
+        if (
+            getattr(line, "display_type", False)
+            or getattr(line, "is_delivery", False)
+            or getattr(line, "is_downpayment", False)
+        ):
+            continue
+        if len(items) >= _MAX_PRODUCTS:
+            return None
+        normalized = _normalize_product_line(line, currency)
+        if normalized is None:
+            return None
+        items.append(normalized)
+    return items or None
+
+
+def _order_products_json(order):
+    items = _extract_products(order)
+    if not items:
+        return False
+    return json.dumps(items, separators=(",", ":"), ensure_ascii=False)
+
+
+def _products_from_json(raw):
+    if not raw:
+        return None
+    if not isinstance(raw, str):
+        raise CheckoutError("order_changed")
+    try:
+        loaded = json.loads(raw)
+    except ValueError:
+        raise CheckoutError("order_changed") from None
+    # Decode a fresh view; the immutable stored snapshot is never rewritten.
+    if isinstance(loaded, list):
+        for item in loaded:
+            if isinstance(item, dict):
+                item.pop("image_url", None)
+    if (
+        not isinstance(loaded, list)
+        or not 1 <= len(loaded) <= _MAX_PRODUCTS
+        or any(not isinstance(item, dict) for item in loaded)
+    ):
+        raise CheckoutError("order_changed")
+    return loaded
+
+
+def _attempt_products(attempt):
+    return _products_from_json(getattr(attempt, "products_json", False))
+
+
+def _assert_attempt_snapshot(attempt, order, provider, connection, amount, currency, products_json=_UNSET):
+    if products_json is _UNSET:
+        products_json = _order_products_json(order)
+    stored_products = _attempt_products(attempt)
     if (
         attempt.disposition not in _RESUMABLE
         or attempt.sale_order_id != order
@@ -146,6 +345,13 @@ def _assert_attempt_snapshot(attempt, order, provider, connection, amount, curre
         or attempt.environment != connection.environment
         or attempt.amount != amount
         or attempt.currency != currency
+        or (
+            attempt.transaction_id.state == "draft"
+            and not attempt.invoice_id
+            # JSON equality keeps bool/int/float distinct in the decoded product views.
+            and json.dumps(stored_products, sort_keys=True)
+            != json.dumps(_products_from_json(products_json), sort_keys=True)
+        )
     ):
         raise CheckoutError("order_changed")
 
@@ -162,11 +368,12 @@ def prepare_attempt(transaction):
     provider = transaction.provider_id
     _lock_checkout(order, provider)
     connection, amount, currency = _checkout_snapshot(transaction, order, provider)
+    products_json = _order_products_json(order)
 
     attempts = transaction.env["paymos.attempt"].sudo()
     current = _current_attempt(attempts, order)
     if current:
-        _assert_attempt_snapshot(current, order, provider, connection, amount, currency)
+        _assert_attempt_snapshot(current, order, provider, connection, amount, currency, products_json)
         original = current.transaction_id
         if _checkout_order(original) != order:
             raise CheckoutError("order_changed")
@@ -189,6 +396,7 @@ def prepare_attempt(transaction):
         "external_order_id": f"odoo_{secrets.token_hex(16)}",
         "amount": amount,
         "currency": currency,
+        "products_json": products_json,
     })
 
 
@@ -197,10 +405,18 @@ def _request_invoice(attempt):
     client = _sdk_call(sdk.make_client, credentials)
     if attempt.invoice_id:
         return _sdk_call(client.invoices.get, attempt.invoice_id)
-    return _sdk_call(
-        client.invoices.create, project_id=attempt.project_id, external_order_id=attempt.external_order_id,
-        amount=attempt.amount, currency=attempt.currency,
-    )
+    payload = {
+        "project_id": attempt.project_id,
+        "external_order_id": attempt.external_order_id,
+        "amount": attempt.amount,
+        "currency": attempt.currency,
+    }
+    products = _attempt_products(attempt)
+    if products is not None:
+        payload["products"] = products
+    if callable(getattr(client, "request", None)):
+        return _sdk_call(client.request, "POST", "/v1/invoices", payload)
+    return _sdk_call(client.invoices.create, **payload)
 
 
 def _checkout_url(invoice, invoice_id):

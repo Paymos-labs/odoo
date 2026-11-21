@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import dataclass, field
 from http.client import HTTPException
 from importlib import import_module
@@ -10,7 +11,9 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 API_ORIGIN = "https://api.paymos.io"
 CHECKOUT_ORIGIN = "https://checkout.paymos.io"
-SDK_VERSION = "1.6.0"
+SDK_MAJOR = 1
+MIN_SDK_VERSION = (1, 6, 0)
+_SDK_VERSION_RE = re.compile(rf"{SDK_MAJOR}\.(0|[1-9]\d*)\.(0|[1-9]\d*)", re.ASCII)
 HTTP_TIMEOUT = 8
 _API_MAX_RESPONSE = 1024 * 1024
 _SAFE_API_CODES = {
@@ -113,12 +116,21 @@ def request_https(method, url, headers, body, timeout, *, origin, max_bytes):
     raise PaymosTransportError("Paymos HTTPS response exceeded its limits.")
 
 
+def is_supported_sdk_version(value):
+    if not isinstance(value, str):
+        return False
+    match = _SDK_VERSION_RE.fullmatch(value)
+    if match is None:
+        return False
+    return (SDK_MAJOR, int(match.group(1)), int(match.group(2))) >= MIN_SDK_VERSION
+
+
 def _vendor():
     try:
         vendor = import_module(".._vendor.paymos", package=__package__)
     except ImportError:
         raise PaymosSdkError("The bundled Paymos SDK is unavailable.") from None
-    if getattr(vendor, "VERSION", None) != SDK_VERSION:
+    if not is_supported_sdk_version(getattr(vendor, "VERSION", None)):
         raise PaymosSdkError("The bundled Paymos SDK version does not match.")
     return vendor
 
