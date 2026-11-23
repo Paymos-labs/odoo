@@ -466,3 +466,69 @@ class TestPaymosWebhook(HttpCase):
         self.assertEqual(self._post(raw).status_code, 503)
         self.factory.assert_not_called()
         self.assertFalse(self._queue(tx))
+
+    def test_refund_external_order_id_utf16_boundary(self):
+        valid_refs = {
+            "ascii_128": "a" * 128,
+            "ascii_129": "b" * 129,
+            "ascii_200": "c" * 200,
+            "cyrillic_150": "я" * 150,
+            "cyrillic_200": "я" * 200,
+            "astral_100": "😀" * 100,
+        }
+        for label, ref in valid_refs.items():
+            for mode, status in (("full", "failed"), ("full", "cancelled"), ("overpayment", "completed")):
+                with self.subTest(label=label, mode=mode, status=status):
+                    order, tx, attempt = self._attempt()
+                    invoice = self._invoice(attempt)
+                    self.client.invoices.get.return_value = invoice
+                    self.client.refunds.list.return_value = {
+                        "items": [{
+                            "withdrawal_id": "wdr_nonblocking1", "external_order_id": ref,
+                            "invoice_id": _INVOICE_ID, "project_id": _PROJECT, "is_test": True,
+                            "type": "refund", "mode": mode, "status": status, "is_final": True,
+                        }],
+                        "next_cursor": None,
+                    }
+                    self.assertEqual(self._post(self._raw(invoice, f"evt_utf16_{label}_{mode}_{status}")).status_code, 200)
+                    self._consume(tx, post_process=False)
+                    self.assertEqual((tx.state, attempt.disposition), ("done", "paid"))
+
+        for blocking_status, is_final in (("pending_review", False), ("completed", True)):
+            with self.subTest(blocking_status=blocking_status):
+                _order, tx, attempt = self._attempt()
+                invoice = self._invoice(attempt)
+                self.client.invoices.get.return_value = invoice
+                self.client.refunds.list.return_value = {
+                    "items": [{
+                        "withdrawal_id": "wdr_blocking1", "external_order_id": valid_refs["cyrillic_200"],
+                        "invoice_id": _INVOICE_ID, "project_id": _PROJECT, "is_test": True,
+                        "type": "refund", "mode": "full", "status": blocking_status, "is_final": is_final,
+                    }],
+                    "next_cursor": None,
+                }
+                self.assertEqual(self._post(self._raw(invoice, f"evt_block_{blocking_status}")).status_code, 200)
+                self.assertEqual((attempt.disposition, attempt.review_reason), ("review", "external_full_refund"))
+                self.assertFalse(self._queue(tx))
+
+        for label, too_long in (
+            ("ascii_201", "a" * 201),
+            ("cyrillic_201", "я" * 201),
+            ("astral_100_plus_1", "😀" * 100 + "a"),
+            ("astral_101", "😀" * 101),
+        ):
+            with self.subTest(too_long=label):
+                _order, tx, attempt = self._attempt()
+                invoice = self._invoice(attempt)
+                self.client.invoices.get.return_value = invoice
+                self.client.refunds.list.return_value = {
+                    "items": [{
+                        "withdrawal_id": "wdr_toolong1", "external_order_id": too_long,
+                        "invoice_id": _INVOICE_ID, "project_id": _PROJECT, "is_test": True,
+                        "type": "refund", "mode": "full", "status": "failed", "is_final": True,
+                    }],
+                    "next_cursor": None,
+                }
+                self.assertEqual(self._post(self._raw(invoice, f"evt_long_{label}")).status_code, 503)
+                self.assertEqual(attempt.review_reason, "refund_snapshot_invalid")
+                self.assertFalse(self._queue(tx))

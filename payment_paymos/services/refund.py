@@ -16,10 +16,19 @@ MAX_CHECKS = 12
 _FINAL = {"completed", "failed", "cancelled"}
 _IN_FLIGHT = {"created", "pending_review", "signed", "cancelling"}
 _CLOSED_OPERATIONS = ("completed", "failed", "cancelled")
+_MAX_EXTERNAL_ORDER_ID_UTF16_UNITS = 200
 
 
 class RefundSnapshotError(ValueError):
     pass
+
+
+def _utf16_code_units(value):
+    # .NET string limits count UTF-16 code units, including two for astral characters.
+    try:
+        return len(value.encode("utf-16-le")) // 2
+    except UnicodeEncodeError:
+        return None
 
 
 def _requires_contract(credentials):
@@ -32,13 +41,14 @@ def _refund_item(item, attempt, invoice_id):
         raise RefundSnapshotError("refund_snapshot_invalid")
     withdrawal_id = item.get("withdrawal_id")
     external_id = item.get("external_order_id")
+    external_units = _utf16_code_units(external_id) if isinstance(external_id, str) else None
     status = item.get("status")
     if (
         not isinstance(withdrawal_id, str)
         or not re.fullmatch(r"wdr_[A-Za-z0-9]{1,46}", withdrawal_id)
-        or not isinstance(external_id, str)
+        or external_units is None
         or not external_id.strip()
-        or len(external_id) > 128
+        or external_units > _MAX_EXTERNAL_ORDER_ID_UTF16_UNITS
         or item.get("type") != "refund"
         or item.get("invoice_id") != invoice_id
         or item.get("project_id") != attempt.project_id

@@ -407,3 +407,23 @@ class TestPaymosRefund(HttpCase):
         )
         with self.assertRaisesRegex(refund.RefundSnapshotError, "refund_contract_unavailable"):
             refund._requires_contract(invalid)
+
+    def test_refund_history_accepts_200_utf16_units_and_rejects_over_limit(self):
+        _order, parent, attempt, _invoice = self._settled()
+        valid_refs = ("a" * 128, "b" * 129, "c" * 200, "я" * 150, "я" * 200, "😀" * 100)
+        for index, ref in enumerate(valid_refs):
+            item = {
+                "type": "refund", "withdrawal_id": f"wdr_valid{index}", "invoice_id": _INVOICE_ID,
+                "project_id": _PROJECT, "is_test": True, "mode": "full",
+                "external_order_id": ref, "status": "failed", "is_final": True,
+            }
+            self.assertEqual(refund._refund_item(item, attempt, _INVOICE_ID)["external_order_id"], ref)
+
+        for index, too_long in enumerate(("a" * 201, "я" * 201, "😀" * 100 + "a", "😀" * 101)):
+            item = {
+                "type": "refund", "withdrawal_id": f"wdr_over{index}", "invoice_id": _INVOICE_ID,
+                "project_id": _PROJECT, "is_test": True, "mode": "full",
+                "external_order_id": too_long, "status": "failed", "is_final": True,
+            }
+            with self.assertRaisesRegex(refund.RefundSnapshotError, "refund_snapshot_invalid"):
+                refund._refund_item(item, attempt, _INVOICE_ID)
