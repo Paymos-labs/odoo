@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-25
+
+- chore: rebuild canonical CMS package
+
+### Added
+
+- Optional checkout `products[]` line-item payloads with all-or-nothing amount-only fallback and retry snapshot replay.
+
+### Changed
+
+- Dynamically bundle and verify any stable Paymos Python SDK `1.x` release (`>= 1.6.0`) at build and runtime.
+
 ## [1.2.0] - 2026-11-23
 
 - feat(platform): integrate pending main WIP — drop fiat_exchange_rates/VES, blockchain/worker fix batches 1-7, compact auth email layout, status-worker, plugins, forge and docs
