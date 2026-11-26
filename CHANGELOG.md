@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-26
+
+- docs(plugins): add 6-language READMEs (EN/zh-CN/ru/es/de/tr) and YouTube walkthrough previews across all 25 Paymos-labs repos
+- chore: bundle Paymos Python SDK v1.7.2
+- chore: rebuild canonical CMS package
+
+### Added
+
+- Optional checkout `products[]` line-item payloads with all-or-nothing amount-only fallback and retry snapshot replay.
+
+### Changed
+
+- Dynamically bundle and verify any stable Paymos Python SDK `1.x` release (`>= 1.6.0`) at build and runtime.
+
 ## [1.2.1] - 2026-11-25
 
 - chore: rebuild canonical CMS package

@@ -1,6 +1,6 @@
 {
     "name": "Paymos Payments",
-    "version": "20.0.1.2.1",
+    "version": "20.0.1.2.2",
     "summary": "Hosted cryptocurrency checkout for Odoo 20 website orders",
     "description": (
         "Paymos Payments adds hosted checkout, payment verification and refunds to self-hosted Odoo 20.0. "

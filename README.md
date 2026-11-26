@@ -1,8 +1,13 @@
 # Paymos Payments for Odoo
 
+**English** | [简体中文](README.zh-CN.md) | [Русский](README.ru.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [Türkçe](README.tr.md)
+
 Accept cryptocurrency payments on an Odoo 20.0 website using Paymos hosted checkout. The add-on uses Odoo payment transactions and the shop's accounting setup to confirm orders and record refunds.
 
 The add-on is free and licensed under LGPL-3.0-only. Using the hosted payment service requires a Paymos account and project. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+[![Watch: 12 Official CMS Crypto Plugins — 1-Click Connect (Paymos)](https://i.ytimg.com/vi/VMLUGVumYkg/maxresdefault.jpg)](https://www.youtube.com/watch?v=VMLUGVumYkg)
+> **Video walkthrough (1:12, subtitles in 6 languages):** [Watch on YouTube](https://www.youtube.com/watch?v=VMLUGVumYkg)
 
 ## Requirements
 
