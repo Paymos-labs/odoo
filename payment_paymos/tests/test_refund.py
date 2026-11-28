@@ -284,6 +284,33 @@ class TestPaymosRefund(HttpCase):
         self.assertEqual(parent.child_transaction_ids, child)
         self.client.refunds.create.assert_called_once()
 
+    def test_tolerance_payment_full_refund_is_refused_before_a_child_exists(self):
+        # CMSP-26: the server refunds no invoice accepted below its expected amount
+        # (RefundCore: gross < expected), so no refund transaction may wait for it.
+        order, parent, attempt, invoice = self._prepared()
+        invoice["payment"]["paid"] = "12.30"
+        self.assertEqual(self._webhook(self._raw("evt_refund_tolerance", "invoice.paid", invoice)).status_code, 200)
+        self._native_apply(parent)
+        self.assertEqual((parent.state, attempt.disposition, order.state), ("done", "paid", "sale"))
+        with self.assertRaisesRegex(UserError, "Paymos could not authorize a refund"):
+            self._actor(parent).action_refund(amount_to_refund=12.34)
+        self.assertFalse(self._operation(attempt))
+        self.assertFalse(parent.child_transaction_ids)
+        self.client.refunds.create.assert_not_called()
+
+    def test_definitive_refund_refusal_goes_to_review_at_once(self):
+        # CMSP-26: 400, 404, 409, 410 and 422 refuse the POST for good; it is not an unknown result.
+        _order, parent, attempt, _invoice = self._settled()
+        parent._refund()
+        operation = self._operation(attempt)
+        self.client.refunds.create.side_effect = sdk._vendor().ConflictError(409, json.dumps({
+            "type": "about:blank", "title": "Paymos API request failed.", "status": 409, "code": "", "detail": "",
+        }))
+        refund.run_operation(operation)
+        self.assertEqual((operation.state, operation.review_reason), ("review", "refund_request_rejected"))
+        refund.run_operation(operation)
+        self.client.refunds.create.assert_called_once()
+
     def test_overpayment_does_not_change_principal(self):
         order, parent, attempt, _invoice = self._settled("paid_over")
         original_payment = parent.payment_id

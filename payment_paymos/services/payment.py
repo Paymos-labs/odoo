@@ -348,6 +348,9 @@ def _assert_attempt_snapshot(attempt, order, provider, connection, amount, curre
         or (
             attempt.transaction_id.state == "draft"
             and not attempt.invoice_id
+            # An attempt without a products snapshot (one made by 20.0.1.0.0) is resumed
+            # amount-only, as it was first prepared.
+            and stored_products is not None
             # JSON equality keeps bool/int/float distinct in the decoded product views.
             and json.dumps(stored_products, sort_keys=True)
             != json.dumps(_products_from_json(products_json), sort_keys=True)

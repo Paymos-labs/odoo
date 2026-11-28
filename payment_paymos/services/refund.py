@@ -136,6 +136,18 @@ def _assert_parent_accounted(parent):
         raise payment.CheckoutError("refund_original_unverified")
 
 
+def _paid_below_expected(marker):
+    # A payment accepted within the underpayment tolerance is final "paid" with less than
+    # expected; the server refunds no such invoice. Markers without amounts are not judged.
+    try:
+        return (
+            money.parse_decimal(getattr(marker, "token_paid", False))
+            < money.parse_decimal(getattr(marker, "token_expected", False))
+        )
+    except money.AmountError:
+        return False
+
+
 def request_operation(parent, mode, amount=None):
     """Create a durable local intent. This path never sends a financial API request."""
     attempt = parent._paymos_attempt()
@@ -167,6 +179,8 @@ def request_operation(parent, mode, amount=None):
     credentials = payment.credentials_for_attempt(attempt)
     _requires_contract(credentials)
     if mode == "full":
+        if _paid_below_expected(marker):
+            raise payment.CheckoutError("refund_not_eligible")
         payment.assert_accounting_ready(parent.provider_id, parent.currency_id)
         with parent._paymos_allow_refund_create():
             child = parent._create_child_transaction(parent.amount, is_refund=True)
@@ -334,6 +348,23 @@ def _check_local_operation(operation):
         payment.assert_accounting_ready(attempt.provider_id, attempt.transaction_id.currency_id)
 
 
+def _create_refund(client, operation):
+    """POST the intent. 400, 404, 409, 410 and 422 refuse this request for good: no refund exists.
+
+    401 and 403 point at a key being rotated or revoked; like 408, 429 and 5xx they stay on the
+    unknown-result retries.
+    """
+    try:
+        return client.refunds.create(
+            invoice_id=operation.attempt_id.invoice_id, mode=operation.mode,
+            external_order_id=operation.external_order_id,
+        )
+    except sdk._vendor().ApiError as error:
+        if error.status in (400, 404, 409, 410, 422):
+            raise RefundSnapshotError(error.code or "refund_request_rejected") from None
+        raise
+
+
 def run_operation(operation):
     """Process one committed intent. A retry can only use its original API tuple."""
     if operation.state in (*_CLOSED_OPERATIONS, "review"):
@@ -364,10 +395,7 @@ def run_operation(operation):
                 raise RefundSnapshotError("refund_no_overpayment")
             _amount_for_mode(operation, invoice, history)
             try:
-                snapshot = payment._sdk_call(
-                    client.refunds.create, invoice_id=operation.attempt_id.invoice_id,
-                    mode=operation.mode, external_order_id=operation.external_order_id,
-                )
+                snapshot = payment._sdk_call(_create_refund, client, operation)
                 created = True
             except payment.CheckoutError:
                 operation._paymos_defer("refund_result_unknown", state="unknown")

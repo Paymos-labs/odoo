@@ -1,6 +1,6 @@
 {
     "name": "Paymos Payments",
-    "version": "20.0.1.2.2",
+    "version": "20.0.1.2.3",
     "summary": "Hosted cryptocurrency checkout for Odoo 20 website orders",
     "description": (
         "Paymos Payments adds hosted checkout, payment verification and refunds to self-hosted Odoo 20.0. "
@@ -8,8 +8,10 @@
         "and project. Odoo.sh compatibility awaits a hosted check. Odoo Online excludes third-party Python add-ons.\n\n"
         "When an administrator opens the Paymos approval page through Connect, Paymos receives the store's "
         "canonical HTTPS URL and a one-time approval code. The invoice creation request sends the Paymos "
-        "project ID, order amount, currency and an opaque order reference. Odoo keeps buyer identity out of "
-        "that request. Buyers enter payment details on the hosted Paymos page."
+        "project ID, order amount, currency and an opaque order reference. For an order with 1 to 50 valid "
+        "product lines it also sends each line's title, quantity, unit price and optional plain-text "
+        "description, shown on the Paymos checkout. Odoo keeps buyer identity out of that request. Buyers "
+        "enter payment details on the hosted Paymos page."
     ),
     "category": "Accounting/Payment Providers",
     "license": "LGPL-3",

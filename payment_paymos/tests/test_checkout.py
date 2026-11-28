@@ -216,6 +216,25 @@ class TestPaymosCheckout(HttpCase):
             self.assertEqual(self.env["paymos.attempt"].search_count([("sale_order_id", "=", order.id)]), 1)
             factory.assert_not_called()
 
+    def test_attempt_without_products_snapshot_resumes_amount_only(self):
+        # CMSP-43: an attempt prepared by 20.0.1.0.0 has no products_json. After the update its
+        # unsent transaction is resumed amount-only instead of failing as order_changed.
+        order = self._order()
+        tx = self._transaction(order)
+        invoices = Mock()
+        with patch.object(sdk, "make_client", return_value=SimpleNamespace(invoices=invoices)):
+            form = self._render(tx)
+            attempt = self.env["paymos.attempt"].browse(int(form["attempt_id"]))
+            attempt.write({"products_json": False})
+            self.assertEqual(self._render(tx)["attempt_id"], form["attempt_id"])
+            invoices.create.return_value = self._invoice(attempt)
+            response = self._start(form)
+        self.assertEqual(response.status_code, 303)
+        invoices.create.assert_called_once_with(
+            project_id=_PROJECT, amount="12.34", currency="EUR",
+            external_order_id=attempt.external_order_id,
+        )
+
     def test_start_requires_native_csrf_exact_token_and_same_session(self):
         order = self._order()
         tx = self._transaction(order)

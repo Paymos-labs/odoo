@@ -15,7 +15,7 @@
 <section class="oe_container">
   <div class="oe_row oe_spaced">
     <h3>Confirm the order after payment</h3>
-    <p>Paymos receives the store URL during connection. An invoice request sends the project identifier, saved order amount, currency, and an opaque reference. It does not include the buyer’s name or email. Paymos hosts the payment page and sends the signed result back to Odoo.</p>
+    <p>Paymos receives the store URL during connection. An invoice request sends the project identifier, saved order amount, currency, and an opaque reference. For an order with 1 to 50 valid product lines, it also sends each line’s title, quantity, unit price, and optional plain-text description for the Paymos checkout. It does not include the buyer’s name or email. Paymos hosts the payment page and sends the signed result back to Odoo.</p>
     <img class="img-fluid" src="checkout.png" alt="Paymos as a payment option in an Odoo test checkout">
   </div>
 </section>

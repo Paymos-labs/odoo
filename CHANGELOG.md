@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-11-28
+
+- fix(odoo): refuse tolerance refunds early, review definitive refusals
+
+### Changed
+
+- The module description and the Odoo Apps page say that invoice requests also carry the order's product lines (title, quantity, unit price, optional description).
+
+### Fixed
+
+- A full refund of a payment accepted within the underpayment tolerance is refused at once, before a refund transaction is created: Paymos refunds no invoice paid below its expected amount, and the refund transaction used to stay pending for good.
+- A refund request Paymos refuses for good (400, 404, 409, 410 or 422) goes to review with its reason at once instead of twelve retries as an unknown result. 401, 403, 408, 429 and 5xx are still retried.
+- An unsent checkout prepared by 20.0.1.0.0, which has no product snapshot, no longer fails as a changed order after the update; it is resumed amount-only.
+
 ## [1.2.2] - 2026-11-26
 
 - docs(plugins): add 6-language READMEs (EN/zh-CN/ru/es/de/tr) and YouTube walkthrough previews across all 25 Paymos-labs repos
